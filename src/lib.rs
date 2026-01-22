@@ -68,8 +68,13 @@ where
         }
         let _ = mem::replace(&mut self.buckets, new_buckets);
     }
-    pub fn remove(&self, key: &K) -> bool {
-        todo!("not implemented")
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let bucket = self.bucket(key);
+        let bucket = &mut self.buckets[bucket];
+
+        let i: usize = bucket.iter().position(|&(ref ekey, _)| ekey == key)?;
+
+        Some(bucket.swap_remove(i).1)
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
@@ -99,5 +104,7 @@ mod tests {
         map.insert("foo", 42);
 
         assert_eq!(map.get(&"foo"), Some(&42));
+        assert_eq!(map.remove(&"foo"), Some(42));
+        assert_eq!(map.get(&"foo"), None);
     }
 }
