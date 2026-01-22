@@ -73,7 +73,7 @@ where
         let bucket = &mut self.buckets[bucket];
 
         let i: usize = bucket.iter().position(|&(ref ekey, _)| ekey == key)?;
-
+        self.items -= 1;
         Some(bucket.swap_remove(i).1)
     }
 
