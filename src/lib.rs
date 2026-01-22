@@ -29,11 +29,7 @@ where
             self.resize();
         }
 
-        let mut hasher = DefaultHasher::new();
-        // feed value of key into the hasher
-        key.hash(&mut hasher);
-        // finish the hasher to get the final hash value
-        let bucket: usize = (hasher.finish() % self.buckets.len() as u64) as usize;
+        let bucket = self.bucket(&key);
         let bucket = &mut self.buckets[bucket];
 
         self.items += 1;
@@ -45,6 +41,14 @@ where
         bucket.push((key, value));
 
         None
+    }
+    fn bucket(&self, key: &K) -> usize {
+        let mut hasher = DefaultHasher::new();
+        // feed value of key into the hasher
+        key.hash(&mut hasher);
+        // finish the hasher to get the final hash value
+        let bucket: usize = (hasher.finish() % self.buckets.len() as u64) as usize;
+        bucket
     }
     fn resize(&mut self) {
         let target_size = match self.buckets.len() {
@@ -64,6 +68,25 @@ where
         }
         let _ = mem::replace(&mut self.buckets, new_buckets);
     }
+    pub fn remove(&self, key: &K) -> bool {
+        todo!("not implemented")
+    }
+
+    pub fn get(&self, key: &K) -> Option<&V> {
+        let bucket = self.bucket(key);
+        self.buckets[bucket]
+            .iter()
+            .find(|&(ekey, _)| ekey == key)
+            .map(|&(_, ref evalue)| evalue)
+    }
+
+    pub fn contains_key(&self, key: &K) -> bool {
+        todo!("not implemented")
+    }
+
+    pub fn len(&self) -> usize {
+        todo!("not implemented")
+    }
 }
 
 #[cfg(test)]
@@ -71,8 +94,10 @@ mod tests {
     use super::*;
     #[test]
 
-    fn insert() {
+    fn insert_and_get() {
         let mut map = HashMap::new();
         map.insert("foo", 42);
+
+        assert_eq!(map.get(&"foo"), Some(&42));
     }
 }
