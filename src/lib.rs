@@ -86,11 +86,18 @@ where
     }
 
     pub fn contains_key(&self, key: &K) -> bool {
-        todo!("not implemented")
+        let bucket = self.bucket(key);
+        self.buckets[bucket]
+            .iter()
+            .find(|&(ekey, _)| ekey == key)
+            .is_some()
     }
 
     pub fn len(&self) -> usize {
-        todo!("not implemented")
+        self.items
+    }
+    pub fn is_empty(&self) -> bool {
+        self.items == 0
     }
 }
 
@@ -101,10 +108,17 @@ mod tests {
 
     fn insert_and_get() {
         let mut map = HashMap::new();
+        assert_eq!(map.len(), 0);
+        assert!(map.is_empty());
         map.insert("foo", 42);
-
+        assert_eq!(map.len(), 1);
+        assert!(!map.is_empty());
         assert_eq!(map.get(&"foo"), Some(&42));
         assert_eq!(map.remove(&"foo"), Some(42));
+        assert_eq!(map.len(), 0);
+        assert!(map.is_empty());
         assert_eq!(map.get(&"foo"), None);
+        map.insert("foo", 42);
+        assert!(map.contains_key(&"foo"))
     }
 }
