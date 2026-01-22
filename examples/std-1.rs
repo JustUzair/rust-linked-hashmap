@@ -2,7 +2,7 @@ extern crate hashmap;
 
 use hashmap::HashMap;
 
-fn test_examples() {
+fn main() {
     // Type inference lets us omit an explicit type signature (which
     // would be `HashMap<String, String>` in this example).
     let mut book_reviews = HashMap::new();

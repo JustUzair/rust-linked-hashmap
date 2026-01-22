@@ -86,11 +86,7 @@ where
     }
 
     pub fn contains_key(&self, key: &K) -> bool {
-        let bucket = self.bucket(key);
-        self.buckets[bucket]
-            .iter()
-            .find(|&(ekey, _)| ekey == key)
-            .is_some()
+        self.get(key).is_some()
     }
 
     pub fn len(&self) -> usize {
@@ -98,6 +94,46 @@ where
     }
     pub fn is_empty(&self) -> bool {
         self.items == 0
+    }
+}
+
+pub struct Iter<'a, K: 'a, V: 'a> {
+    map: &'a HashMap<K, V>,
+    bucket: usize,
+    at: usize,
+}
+
+impl<'a, K, V> Iterator for Iter<'a, K, V> {
+    type Item = (&'a K, &'a V);
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.map.buckets.get(self.bucket) {
+                Some(bucket) => match bucket.get(self.at) {
+                    Some(&(ref k, ref v)) => {
+                        self.at += 1;
+                        break Some((k, v));
+                    }
+                    None => {
+                        self.bucket += 1;
+                        self.at = 0;
+                        continue;
+                    }
+                },
+                None => break None,
+            }
+        }
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a HashMap<K, V> {
+    type Item = (&'a K, &'a V);
+    type IntoIter = Iter<'a, K, V>;
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            map: self,
+            bucket: 0,
+            at: 0,
+        }
     }
 }
 
@@ -120,5 +156,37 @@ mod tests {
         assert_eq!(map.get(&"foo"), None);
         map.insert("foo", 42);
         assert!(map.contains_key(&"foo"))
+    }
+
+    #[test]
+    fn iter() {
+        let mut map = HashMap::new();
+        map.insert("foo", 42);
+        map.insert("bar", 43);
+        map.insert("baz", 142);
+        map.insert("quox", 7);
+        for (&k, &v) in &map {
+            match k {
+                "foo" => assert_eq!(v, 42),
+                "bar" => assert_eq!(v, 43),
+                "baz" => assert_eq!(v, 142),
+                "quox" => assert_eq!(v, 7),
+                _ => unreachable!(),
+            }
+        }
+        assert_eq!((&map).into_iter().count(), 4);
+
+        let mut items = 0;
+        for (k, v) in &map {
+            match k {
+                &"foo" => assert_eq!(v, &42),
+                &"bar" => assert_eq!(v, &43),
+                &"baz" => assert_eq!(v, &142),
+                &"quox" => assert_eq!(v, &7),
+                _ => unreachable!(),
+            }
+            items += 1;
+        }
+        assert_eq!(items, 4);
     }
 }
