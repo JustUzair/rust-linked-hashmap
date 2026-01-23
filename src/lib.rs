@@ -18,13 +18,21 @@ pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
 }
 pub struct VacantEntry<'a, K: 'a, V: 'a> {
     key: K,
-    bucket: &'a mut Vec<(K, V)>,
+    map: &'a mut HashMap<K, V>,
+    bucket: usize,
 }
 
-impl<'a, K: 'a, V: 'a> VacantEntry<'a, K, V> {
+impl<'a, K: 'a, V: 'a> VacantEntry<'a, K, V>
+where
+    K: Hash + Eq,
+{
     pub fn insert(self, value: V) -> &'a mut V {
-        self.bucket.push((self.key, value));
-        &mut self.bucket.last_mut().unwrap().1
+        if self.map.buckets.is_empty() || self.map.items > 3 * self.map.buckets.len() / 4 {
+            self.map.resize();
+        }
+        self.map.buckets[self.bucket].push((self.key, value));
+        self.map.items += 1;
+        &mut self.map.buckets[self.bucket].last_mut().unwrap().1
     }
 }
 pub enum Entry<'a, K: 'a, V: 'a> {
@@ -32,7 +40,10 @@ pub enum Entry<'a, K: 'a, V: 'a> {
     Vacant(VacantEntry<'a, K, V>),
 }
 
-impl<'a, K: 'a, V: 'a> Entry<'a, K, V> {
+impl<'a, K: 'a, V: 'a> Entry<'a, K, V>
+where
+    K: Hash + Eq,
+{
     pub fn or_insert(self, value: V) -> &'a mut V {
         match self {
             Entry::Occupied(e) => &mut e.entry.1,
@@ -56,6 +67,22 @@ impl<'a, K: 'a, V: 'a> Entry<'a, K, V> {
             Entry::Occupied(e) => &mut e.entry.1,
             Entry::Vacant(e) => e.insert(V::default()),
         }
+    }
+}
+
+impl<K, V> FromIterator<(K, V)> for HashMap<K, V>
+where
+    K: Hash + Eq,
+{
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = (K, V)>,
+    {
+        let mut map = HashMap::new();
+        for (k, v) in iter {
+            map.insert(k, v);
+        }
+        map
     }
 }
 
@@ -148,16 +175,25 @@ where
             .map(|&(_, ref evalue)| evalue)
     }
 
-    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
-        let bucket = self.bucket(&key);
-        let bucket = &mut self.buckets[bucket];
-        if let Some(index) = bucket.iter().position(|(ekey, _)| ekey == &key) {
+    pub fn entry<'a>(&'a mut self, key: K) -> Entry<'a, K, V> {
+        if self.buckets.is_empty() || self.items > 3 * self.buckets.len() / 4 {
+            self.resize();
+        }
+        let bucket_index = self.bucket(&key);
+        if let Some(index) = self.buckets[bucket_index]
+            .iter()
+            .position(|(ekey, _)| ekey == &key)
+        {
             return Entry::Occupied(OccupiedEntry {
-                entry: &mut bucket[index],
+                entry: &mut self.buckets[bucket_index][index], // Bucket: Vec<Vec<K,V>>
             });
         }
 
-        Entry::Vacant(VacantEntry { key, bucket })
+        Entry::Vacant(VacantEntry {
+            key,
+            map: self,
+            bucket: bucket_index,
+        })
     }
 
     pub fn contains_key<Q>(&self, key: &Q) -> bool
