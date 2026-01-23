@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use std::mem;
 use std::{
     collections::hash_map::DefaultHasher,
@@ -9,6 +11,52 @@ const INITIAL_NBUCKETS: usize = 1;
 pub struct HashMap<K, V> {
     buckets: Vec<Vec<(K, V)>>,
     items: usize,
+}
+
+pub struct OccupiedEntry<'a, K: 'a, V: 'a> {
+    entry: &'a mut (K, V),
+}
+pub struct VacantEntry<'a, K: 'a, V: 'a> {
+    key: K,
+    bucket: &'a mut Vec<(K, V)>,
+}
+
+impl<'a, K: 'a, V: 'a> VacantEntry<'a, K, V> {
+    pub fn insert(self, value: V) -> &'a mut V {
+        self.bucket.push((self.key, value));
+        &mut self.bucket.last_mut().unwrap().1
+    }
+}
+pub enum Entry<'a, K: 'a, V: 'a> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+impl<'a, K: 'a, V: 'a> Entry<'a, K, V> {
+    pub fn or_insert(self, value: V) -> &'a mut V {
+        match self {
+            Entry::Occupied(e) => &mut e.entry.1,
+            Entry::Vacant(e) => e.insert(value),
+        }
+    }
+    pub fn or_insert_with<F>(self, maker: F) -> &'a mut V
+    where
+        F: FnOnce() -> V,
+    {
+        match self {
+            Entry::Occupied(e) => &mut e.entry.1,
+            Entry::Vacant(e) => e.insert(maker()),
+        }
+    }
+    pub fn or_default(self) -> &'a mut V
+    where
+        V: Default,
+    {
+        match self {
+            Entry::Occupied(e) => &mut e.entry.1,
+            Entry::Vacant(e) => e.insert(V::default()),
+        }
+    }
 }
 
 impl<K, V> HashMap<K, V> {
@@ -25,7 +73,7 @@ where
     K: Hash + Eq,
 {
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        if self.buckets.is_empty() || self.items >= self.buckets.len() / 3 {
+        if self.buckets.is_empty() || self.items > 3 * self.buckets.len() / 4 {
             self.resize();
         }
 
@@ -42,7 +90,11 @@ where
 
         None
     }
-    fn bucket(&self, key: &K) -> usize {
+    fn bucket<Q>(&self, key: &Q) -> usize
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         let mut hasher = DefaultHasher::new();
         // feed value of key into the hasher
         key.hash(&mut hasher);
@@ -50,6 +102,7 @@ where
         let bucket: usize = (hasher.finish() % self.buckets.len() as u64) as usize;
         bucket
     }
+
     fn resize(&mut self) {
         let target_size = match self.buckets.len() {
             0 => INITIAL_NBUCKETS,
@@ -68,24 +121,50 @@ where
         }
         let _ = mem::replace(&mut self.buckets, new_buckets);
     }
-    pub fn remove(&mut self, key: &K) -> Option<V> {
+    pub fn remove<Q>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         let bucket = self.bucket(key);
         let bucket = &mut self.buckets[bucket];
 
-        let i: usize = bucket.iter().position(|&(ref ekey, _)| ekey == key)?;
+        let i: usize = bucket
+            .iter()
+            .position(|&(ref ekey, _)| ekey.borrow() == key)?;
         self.items -= 1;
         Some(bucket.swap_remove(i).1)
     }
 
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<&V>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         let bucket = self.bucket(key);
         self.buckets[bucket]
             .iter()
-            .find(|&(ekey, _)| ekey == key)
+            .find(|&(ekey, _)| ekey.borrow() == key)
             .map(|&(_, ref evalue)| evalue)
     }
 
-    pub fn contains_key(&self, key: &K) -> bool {
+    pub fn entry(&mut self, key: K) -> Entry<'_, K, V> {
+        let bucket = self.bucket(&key);
+        let bucket = &mut self.buckets[bucket];
+        if let Some(index) = bucket.iter().position(|(ekey, _)| ekey == &key) {
+            return Entry::Occupied(OccupiedEntry {
+                entry: &mut bucket[index],
+            });
+        }
+
+        Entry::Vacant(VacantEntry { key, bucket })
+    }
+
+    pub fn contains_key<Q>(&self, key: &Q) -> bool
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         self.get(key).is_some()
     }
 
